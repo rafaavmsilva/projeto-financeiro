@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Sistema Financeiro{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card bg-success text-white mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Receitas</h5>
+                <h2 class="card-text">R$ {{ "{:,.2f}".format(summary.receitas) }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-danger text-white mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Despesas</h5>
+                <h2 class="card-text">R$ {{ "{:,.2f}".format(summary.despesas) }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-info text-white mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Saldo</h5>
+                <h2 class="card-text">R$ {{ "{:,.2f}".format(summary.saldo) }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Distribuição de Despesas</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="expensesChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Evolução Mensal</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch and create charts
+    fetch('/api/dashboard_data')
+        .then(response => response.json())
+        .then(data => {
+            createExpensesChart(data.expenses_by_category);
+            createMonthlyChart(data.monthly_data);
+        });
+});
+
+function createExpensesChart(data) {
+    const ctx = document.getElementById('expensesChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.values,
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                    '#FF9F40', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                }
+            }
+        }
+    });
+}
+
+function createMonthlyChart(data) {
+    const ctx = document.getElementById('monthlyChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.months,
+            datasets: [{
+                label: 'Receitas',
+                data: data.income,
+                borderColor: '#28a745',
+                fill: false
+            }, {
+                label: 'Despesas',
+                data: data.expenses,
+                borderColor: '#dc3545',
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

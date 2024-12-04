@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Recebidos e Pagamentos</h2>
+    
+    {% if failed_cnpjs > 0 %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <strong>Atenção!</strong> {{ failed_cnpjs }} CNPJs não puderam ser consultados.
+        <button id="retryButton" class="btn btn-sm btn-warning ms-2">Tentar Novamente</button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Resumo</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <p>Total PIX Recebido: R$ {{ "%.2f"|format(totals.pix_recebido|float)|replace('.', ',') }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <p>Total TED Recebida: R$ {{ "%.2f"|format(totals.ted_recebida|float)|replace('.', ',') }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <p>Total Pagamentos: R$ {{ "%.2f"|format(totals.pagamento|float)|replace('.', ',') }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtro -->
+    <div class="row mb-3">
+        <div class="col">
+            <div class="btn-group" role="group" aria-label="Filtro de transações">
+                <a href="{{ url_for('recebidos', tipo='todos') }}" 
+                   class="btn btn-outline-primary {% if tipo_filtro == 'todos' %}active{% endif %}">
+                    Todos
+                </a>
+                <a href="{{ url_for('recebidos', tipo='PIX RECEBIDO') }}" 
+                   class="btn btn-outline-success {% if tipo_filtro == 'PIX RECEBIDO' %}active{% endif %}">
+                    PIX
+                </a>
+                <a href="{{ url_for('recebidos', tipo='TED RECEBIDA') }}" 
+                   class="btn btn-outline-info {% if tipo_filtro == 'TED RECEBIDA' %}active{% endif %}">
+                    TED
+                </a>
+                <a href="{{ url_for('recebidos', tipo='PAGAMENTO') }}" 
+                   class="btn btn-outline-warning {% if tipo_filtro == 'PAGAMENTO' %}active{% endif %}">
+                    Pagamentos
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Descrição</th>
+                        <th>Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in transactions %}
+                    <tr>
+                        <td>{{ transaction.date }}</td>
+                        <td>
+                            <span class="badge {% if transaction.type == 'PIX RECEBIDO' %}bg-success{% elif transaction.type == 'TED RECEBIDA' %}bg-info{% else %}bg-warning{% endif %}">
+                                {{ transaction.type }}
+                            </span>
+                        </td>
+                        <td>{{ transaction.description }}</td>
+                        <td class="{% if transaction.value > 0 %}text-success{% else %}text-danger{% endif %}">
+                            R$ {{ "%.2f"|format(transaction.value|float)|replace('.', ',') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('retryButton')?.addEventListener('click', function() {
+    this.disabled = true;
+    this.textContent = 'Tentando...';
+    
+    fetch('/retry_failed_cnpjs')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao tentar novamente. Por favor, recarregue a página.');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao tentar novamente. Por favor, recarregue a página.');
+        });
+});
+</script>
+{% endblock %}

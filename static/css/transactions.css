@@ -1,0 +1,64 @@
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0,0,0,0.125);
+}
+
+.card-title {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.list-group-item {
+    border-left: none;
+    border-right: none;
+    padding: 0.5rem 1rem;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+.transaction-total {
+    font-size: 1.2em;
+    color: #2c3e50;
+}
+
+.transaction-count {
+    color: #6c757d;
+    font-size: 0.9em;
+}
+
+/* Cores específicas para tipos de transação */
+.card.pix-recebido .card-header {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.card.pix-enviado .card-header {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.card.ted-recebida .card-header {
+    background-color: #cce5ff;
+    color: #004085;
+}
+
+.card.ted-enviada .card-header {
+    background-color: #fff3cd;
+    color: #856404;
+}

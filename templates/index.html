@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Upload de Arquivo</h5>
+                    
+                    <!-- Progress bar (inicialmente oculta) -->
+                    <div id="uploadProgress" class="mb-4" style="display: none;">
+                        <div class="progress mb-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%" 
+                                 aria-valuenow="0" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">0%</div>
+                        </div>
+                        <p id="progressMessage" class="text-muted small">Iniciando...</p>
+                    </div>
+                    
+                    <!-- Alert para mensagens -->
+                    <div id="alertMessage" class="alert" style="display: none;" role="alert"></div>
+                    
+                    <!-- Form de upload -->
+                    <form id="uploadForm" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Selecione o arquivo Excel</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".xls,.xlsx">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Enviar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const progressBar = document.querySelector('.progress-bar');
+    const progressDiv = document.getElementById('uploadProgress');
+    const progressMessage = document.getElementById('progressMessage');
+    const alertDiv = document.getElementById('alertMessage');
+    const submitButton = this.querySelector('button[type="submit"]');
+    
+    // Mostra barra de progresso e desabilita botão
+    progressDiv.style.display = 'block';
+    submitButton.disabled = true;
+    alertDiv.style.display = 'none';
+    
+    // Envia o arquivo
+    fetch('{{ url_for("upload_file") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Inicia polling do progresso
+            const processId = data.process_id;
+            checkProgress(processId);
+        } else {
+            showError('Erro ao enviar arquivo: ' + data.message);
+        }
+    })
+    .catch(error => {
+        showError('Erro ao enviar arquivo: ' + error);
+    });
+});
+
+function checkProgress(processId) {
+    const progressBar = document.querySelector('.progress-bar');
+    const progressMessage = document.getElementById('progressMessage');
+    
+    fetch(`/upload_progress/${processId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showError('Erro: ' + data.error);
+                return;
+            }
+            
+            const percent = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
+            progressBar.style.width = `${percent}%`;
+            progressBar.textContent = `${percent}%`;
+            progressMessage.textContent = data.message;
+            
+            if (data.status === 'completed') {
+                showSuccess('Arquivo processado com sucesso!');
+                setTimeout(() => window.location.href = '{{ url_for("recebidos") }}', 1000);
+            } else if (data.status === 'error') {
+                showError(data.message);
+            } else {
+                // Continua verificando o progresso
+                setTimeout(() => checkProgress(processId), 500);
+            }
+        })
+        .catch(error => {
+            showError('Erro ao verificar progresso: ' + error);
+        });
+}
+
+function showError(message) {
+    const alertDiv = document.getElementById('alertMessage');
+    const submitButton = document.querySelector('button[type="submit"]');
+    
+    alertDiv.className = 'alert alert-danger';
+    alertDiv.textContent = message;
+    alertDiv.style.display = 'block';
+    submitButton.disabled = false;
+}
+
+function showSuccess(message) {
+    const alertDiv = document.getElementById('alertMessage');
+    alertDiv.className = 'alert alert-success';
+    alertDiv.textContent = message;
+    alertDiv.style.display = 'block';
+}
+</script>
+{% endblock %}

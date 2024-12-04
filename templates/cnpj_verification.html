@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Consulta de CNPJ</h4>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="cnpj">CNPJ:</label>
+                        <input type="text" class="form-control" id="cnpj" placeholder="Digite o CNPJ (apenas números)">
+                    </div>
+                    <button class="btn btn-primary mt-3" onclick="consultarCNPJ()">Consultar</button>
+                    
+                    <!-- Seção de CNPJs com falha -->
+                    <div id="failedCnpjsSection" class="mt-4" style="display: block;">
+                        <h5>CNPJs com Falha na Consulta:</h5>
+                        <div id="failedCnpjsList" class="mb-3">
+                            <!-- Lista de CNPJs será inserida aqui -->
+                        </div>
+                        <button class="btn btn-warning" onclick="retryFailedCnpjs()">Tentar Novamente CNPJs com Falha</button>
+                    </div>
+
+                    <div id="resultado" class="mt-4" style="display: none;">
+                        <h5>Resultado da Consulta:</h5>
+                        <table class="table">
+                            <tbody>
+                                <tr>
+                                    <th>Razão Social:</th>
+                                    <td id="razaoSocial"></td>
+                                </tr>
+                                <tr>
+                                    <th>Nome Fantasia:</th>
+                                    <td id="nomeFantasia"></td>
+                                </tr>
+                                <tr>
+                                    <th>CNPJ:</th>
+                                    <td id="cnpjResult"></td>
+                                </tr>
+                                <tr>
+                                    <th>Situação Cadastral:</th>
+                                    <td id="situacaoCadastral"></td>
+                                </tr>
+                                <tr>
+                                    <th>Data Início Atividade:</th>
+                                    <td id="dataInicio"></td>
+                                </tr>
+                                <tr>
+                                    <th>CEP:</th>
+                                    <td id="cep"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="error" class="alert alert-danger mt-4" style="display: none;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function consultarCNPJ() {
+    const cnpj = document.getElementById('cnpj').value.replace(/\D/g, '');
+    const resultado = document.getElementById('resultado');
+    const error = document.getElementById('error');
+    
+    if (cnpj.length !== 14) {
+        error.textContent = 'CNPJ inválido. Digite 14 números.';
+        error.style.display = 'block';
+        resultado.style.display = 'none';
+        return;
+    }
+
+    error.style.display = 'none';
+    
+    fetch(`/verify_cnpj/${cnpj}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('razaoSocial').textContent = data.data.razao_social;
+                document.getElementById('nomeFantasia').textContent = data.data.nome_fantasia;
+                document.getElementById('cnpjResult').textContent = data.data.cnpj;
+                document.getElementById('situacaoCadastral').textContent = data.data.descricao_situacao_cadastral;
+                document.getElementById('dataInicio').textContent = data.data.data_inicio_atividade;
+                document.getElementById('cep').textContent = data.data.cep;
+                
+                resultado.style.display = 'block';
+                error.style.display = 'none';
+            } else {
+                throw new Error(data.message);
+            }
+        })
+        .catch(err => {
+            error.textContent = err.message || 'Erro ao consultar CNPJ. Tente novamente.';
+            error.style.display = 'block';
+            resultado.style.display = 'none';
+        });
+}
+
+// Função para buscar e exibir CNPJs com falha
+function loadFailedCnpjs() {
+    fetch('/retry_failed_cnpjs')
+        .then(response => response.json())
+        .then(data => {
+            const failedCnpjsList = document.getElementById('failedCnpjsList');
+            const failedCnpjsSection = document.getElementById('failedCnpjsSection');
+            
+            if (data.failed_cnpjs && data.failed_cnpjs.length > 0) {
+                failedCnpjsList.innerHTML = data.failed_cnpjs.map(cnpj => 
+                    `<div class="badge bg-danger me-2 mb-2">${cnpj}</div>`
+                ).join('');
+                failedCnpjsSection.style.display = 'block';
+            } else {
+                failedCnpjsSection.style.display = 'none';
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao carregar CNPJs com falha:', err);
+        });
+}
+
+// Função para tentar novamente CNPJs com falha
+function retryFailedCnpjs() {
+    fetch('/retry_failed_cnpjs', { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Recarrega a página para atualizar todas as informações
+            window.location.reload();
+        } else {
+            throw new Error(data.message);
+        }
+    })
+    .catch(err => {
+        alert('Erro ao tentar novamente: ' + (err.message || 'Erro desconhecido'));
+    });
+}
+
+// Carrega CNPJs com falha ao carregar a página
+document.addEventListener('DOMContentLoaded', function() {
+    loadFailedCnpjs();
+    // Atualiza a lista a cada 5 segundos
+    setInterval(loadFailedCnpjs, 5000);
+});
+
+// Adiciona máscara ao campo CNPJ
+document.getElementById('cnpj').addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 14) value = value.slice(0, 14);
+    
+    if (value.length > 12) {
+        value = value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/, '$1.$2.$3/$4-$5');
+    } else if (value.length > 8) {
+        value = value.replace(/^(\d{2})(\d{3})(\d{3})(\d*)/, '$1.$2.$3/$4');
+    } else if (value.length > 5) {
+        value = value.replace(/^(\d{2})(\d{3})(\d*)/, '$1.$2.$3');
+    } else if (value.length > 2) {
+        value = value.replace(/^(\d{2})(\d*)/, '$1.$2');
+    }
+    
+    e.target.value = value;
+});
+</script>
+{% endblock %}

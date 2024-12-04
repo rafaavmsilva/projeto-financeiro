@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+<style>
+    .valor-negativo {
+        color: #dc3545;
+    }
+    .valor-positivo {
+        color: #28a745;
+    }
+    .filter-section {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+    .hidden {
+        display: none;
+    }
+    .card {
+        height: 100%;
+        transition: all 0.3s ease;
+    }
+    .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,0.125);
+    }
+    .transaction-card {
+        margin-bottom: 20px;
+    }
+    .list-group-item {
+        border-left: none;
+        border-right: none;
+        padding: 10px 15px;
+    }
+    .list-group-item:first-child {
+        border-top: none;
+    }
+    .list-group-item:last-child {
+        border-bottom: none;
+    }
+    .transaction-stats {
+        padding: 10px;
+        background: #fff;
+        border-radius: 4px;
+    }
+    .transaction-total {
+        font-size: 1.2em;
+        font-weight: 500;
+    }
+    .transaction-count {
+        color: #6c757d;
+        font-size: 0.9em;
+    }
+    
+    /* Cores específicas para cada tipo de transação */
+    .card-header.pix-recebido { background-color: #d4edda; }
+    .card-header.pix-enviado { background-color: #f8d7da; }
+    .card-header.ted-recebida { background-color: #cce5ff; }
+    .card-header.ted-enviada { background-color: #fff3cd; }
+    .card-header.tarifa { background-color: #f8d7da; }
+    .card-header.pagamento { background-color: #f8d7da; }
+    .card-header.iof { background-color: #f8d7da; }
+    .card-header.resgate { background-color: #d4edda; }
+    .card-header.aplicacao { background-color: #f8d7da; }
+    .card-header.compra { background-color: #f8d7da; }
+    .card-header.compensacao { background-color: #e2e3e5; }
+    .card-header.cheque-devolvido { background-color: #f8d7da; }
+    .card-header.juros { background-color: #f8d7da; }
+    .card-header.multa { background-color: #f8d7da; }
+    .card-header.antecipacao { background-color: #d4edda; }
+    .card-header.cheque-emitido { background-color: #f8d7da; }
+    .card-header.outros { background-color: #e2e3e5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Resumo de Transações por Tipo</h2>
+    
+    <div class="filter-section">
+        <label for="tipoTransacao">Filtrar por tipo de transação:</label>
+        <select id="tipoTransacao" class="form-select" onchange="filtrarTransacoes(this.value)">
+            <option value="">Todos os tipos</option>
+            {% for type in summary.keys()|sort %}
+            <option value="{{ type|lower|replace(' ', '-') }}">{{ type }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <div class="row">
+        {% for type, data in summary.items()|sort %}
+        <div class="col-md-6 mb-4 transaction-card" data-type="{{ type|lower|replace(' ', '-') }}">
+            <div class="card">
+                <div class="card-header {{ type|lower|replace(' ', '-') }}">
+                    <h5 class="card-title mb-0">{{ type }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="transaction-stats mb-3">
+                        <div class="transaction-total {% if data.total < 0 %}valor-negativo{% else %}valor-positivo{% endif %}">
+                            Total: R$ {{ "%.2f"|format(data.total|float) }}
+                        </div>
+                        <div class="transaction-count">
+                            Quantidade: {{ data.count }} transações
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>Detalhes das Transações:</h6>
+                        <div class="list-group">
+                            {% for detail in data.details %}
+                            <div class="list-group-item">
+                                {% set description, value = detail.rsplit('(', 1) %}
+                                {% set valor = value.strip('()') | float %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="text-truncate" style="max-width: 70%;">
+                                        {{ description }}
+                                    </div>
+                                    <span class="{% if valor < 0 %}valor-negativo{% else %}valor-positivo{% endif %}">
+                                        R$ {{ "%.2f"|format(valor) }}
+                                    </span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function filtrarTransacoes(tipo) {
+    const cards = document.querySelectorAll('.transaction-card');
+    if (tipo === '') {
+        // Mostrar todos
+        cards.forEach(card => card.classList.remove('hidden'));
+    } else {
+        // Mostrar apenas o tipo selecionado
+        cards.forEach(card => {
+            if (card.dataset.type === tipo) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

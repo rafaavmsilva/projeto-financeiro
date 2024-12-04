@@ -1,0 +1,149 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    margin-bottom: 2rem;
+}
+
+/* Layout principal */
+.wrapper {
+    display: flex;
+    width: 100%;
+    min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 250px;
+    background: #2c3e50;
+    color: white;
+    padding: 20px 0;
+    position: fixed;
+    height: 100vh;
+}
+
+.sidebar-header {
+    padding: 20px;
+    background: #243342;
+}
+
+.sidebar-header h4 {
+    color: white;
+    margin: 0;
+}
+
+.nav-link {
+    color: #ecf0f1;
+    padding: 10px 20px;
+    transition: all 0.3s;
+}
+
+.nav-link:hover {
+    background: #34495e;
+    color: white;
+}
+
+.nav-link.active {
+    background: #3498db;
+    color: white;
+}
+
+.nav-link i {
+    margin-right: 10px;
+    width: 20px;
+    text-align: center;
+}
+
+/* Conteúdo principal */
+.content {
+    margin-left: 250px;
+    padding: 20px;
+    width: calc(100% - 250px);
+    background: #f8f9fa;
+    min-height: 100vh;
+}
+
+/* Cards e elementos do dashboard */
+.card {
+    margin-bottom: 20px;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card-header {
+    background: white;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    padding: 15px 20px;
+}
+
+.alert {
+    margin-bottom: 20px;
+}
+
+/* Progress bar */
+.progress {
+    height: 0.5rem;
+}
+
+/* Icons */
+.bi {
+    margin-right: 0.5rem;
+}
+
+/* Form elements */
+.form-label {
+    font-weight: 500;
+}
+
+.form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.btn-info {
+    color: #fff;
+}
+
+/* Charts */
+canvas {
+    max-height: 300px;
+}
+
+/* Transaction */
+.transaction-receita {
+    color: #198754;
+}
+
+.transaction-despesa {
+    color: #dc3545;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+    }
+    
+    .content {
+        margin-left: 0;
+        width: 100%;
+    }
+    
+    .wrapper {
+        flex-direction: column;
+    }
+}

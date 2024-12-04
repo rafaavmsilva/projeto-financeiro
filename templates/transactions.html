@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Transações - Sistema Financeiro{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">Transações</h4>
+        <div class="btn-group">
+            <button class="btn btn-outline-primary" onclick="exportToExcel()">
+                <i class="bi bi-file-earmark-excel"></i> Exportar
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped" id="transactionsTable">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Categoria</th>
+                        <th>Tipo</th>
+                        <th>Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in transactions %}
+                    <tr>
+                        <td>{{ transaction.date.strftime('%d/%m/%Y') }}</td>
+                        <td>{{ transaction.description }}</td>
+                        <td>{{ transaction.category }}</td>
+                        <td>
+                            <span class="badge {% if transaction.type == 'receita' %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ transaction.type|title }}
+                            </span>
+                        </td>
+                        <td class="text-{% if transaction.type == 'receita' %}success{% else %}danger{% endif %}">
+                            R$ {{ "{:,.2f}".format(transaction.value) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script>
+function exportToExcel() {
+    fetch('/api/transactions')
+        .then(response => response.json())
+        .then(data => {
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Transações");
+            XLSX.writeFile(wb, "transacoes.xlsx");
+        });
+}
+</script>
+{% endblock %}
