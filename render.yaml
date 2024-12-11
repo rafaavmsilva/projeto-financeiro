@@ -2,7 +2,10 @@ services:
   - type: web
     name: financeiro-af360bank
     env: python
-    buildCommand: pip install -r requirements.txt && pip install -e .
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
+      pip install -e .
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
