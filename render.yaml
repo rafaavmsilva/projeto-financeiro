@@ -16,5 +16,5 @@ services:
         value: https://af360bank.onrender.com
       - key: APP_NAME
         value: financeiro
-      - key: PORT
-        value: 10000
+      - key: SECRET_KEY
+        value: your-secret-key-here
