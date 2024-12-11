@@ -17,6 +17,7 @@ import threading
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)  # Set session lifetime to 1 hour
 
 # Ensure the upload and instance folders exist
 for folder in ['instance', 'uploads']:
@@ -41,7 +42,11 @@ def auth():
     token = request.args.get('token')
     if not token or not verify_token(token):
         return redirect('https://af360bank.onrender.com/login')
+    
+    # Set session variables
     session['authenticated'] = True
+    session.permanent = True  # Make the session last longer
+    
     return redirect(url_for('index'))
 
 def login_required(f):
@@ -143,12 +148,16 @@ upload_progress = {}
 @app.route('/')
 @login_required
 def index():
+    if not session.get('authenticated'):
+        return redirect('https://af360bank.onrender.com/login')
     return render_template('index.html', active_page='index')
 
 @app.route('/upload', methods=['POST'])
 @login_required
 @rate_limit()
 def upload_file():
+    if not session.get('authenticated'):
+        return redirect('https://af360bank.onrender.com/login')
     if 'file' not in request.files:
         flash('Nenhum arquivo selecionado')
         return redirect(url_for('index'))
@@ -397,6 +406,8 @@ def get_upload_progress(process_id):
 @app.route('/recebidos')
 @login_required
 def recebidos():
+    if not session.get('authenticated'):
+        return redirect('https://af360bank.onrender.com/login')
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -549,6 +560,8 @@ def retry_failed_cnpjs_post():
 @app.route('/transactions-summary')
 @login_required
 def transactions_summary():
+    if not session.get('authenticated'):
+        return redirect('https://af360bank.onrender.com/login')
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -604,6 +617,8 @@ def verify_cnpj(cnpj):
 @app.route('/cnpj-verification')
 @login_required
 def cnpj_verification_page():
+    if not session.get('authenticated'):
+        return redirect('https://af360bank.onrender.com/login')
     return render_template('cnpj_verification.html', active_page='cnpj_verification')
 
 def extract_and_enrich_cnpj(description, transaction_type):
