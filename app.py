@@ -415,6 +415,15 @@ def get_upload_progress(process_id):
     
     return jsonify(progress_data)
 
+@app.route('/health')
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'time': datetime.now().isoformat(),
+        'auth_server': os.getenv('AUTH_SERVER_URL'),
+        'app_name': os.getenv('APP_NAME')
+    })
+
 @app.route('/recebidos')
 @login_required
 def recebidos():
