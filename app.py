@@ -141,10 +141,12 @@ def get_db_connection():
 upload_progress = {}
 
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html', active_page='index')
 
 @app.route('/upload', methods=['POST'])
+@login_required
 @rate_limit()
 def upload_file():
     if 'file' not in request.files:
@@ -375,6 +377,7 @@ def process_file_with_progress(filepath, process_id):
         upload_progress[process_id]['message'] = f'Erro: {str(e)}'
 
 @app.route('/upload_progress/<process_id>')
+@login_required
 def get_upload_progress(process_id):
     """Retorna o progresso atual do upload"""
     if process_id not in upload_progress:
@@ -392,6 +395,7 @@ def get_upload_progress(process_id):
     return jsonify(progress_data)
 
 @app.route('/recebidos')
+@login_required
 def recebidos():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -464,14 +468,14 @@ def recebidos():
                          tipo_filtro=tipo_filtro,
                          failed_cnpjs=len(failed_cnpjs))
 
-@app.route('/retry_failed_cnpjs', methods=['GET', 'POST'])
+@app.route('/retry-failed-cnpjs')
+@login_required
 def retry_failed_cnpjs():
-    if request.method == 'GET':
-        return jsonify({
-            'success': True,
-            'failed_cnpjs': list(failed_cnpjs)
-        })
-    
+    return render_template('retry_cnpjs.html', active_page='retry_cnpjs')
+
+@app.route('/retry-failed-cnpjs', methods=['POST'])
+@login_required
+def retry_failed_cnpjs_post():
     # POST request - retry failed CNPJs
     success_count = 0
     still_failed = set()
@@ -542,7 +546,8 @@ def retry_failed_cnpjs():
     finally:
         conn.close()
 
-@app.route('/transactions_summary')
+@app.route('/transactions-summary')
+@login_required
 def transactions_summary():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -574,7 +579,13 @@ def transactions_summary():
                          active_page='transactions_summary',
                          summary=summary)
 
-@app.route('/verify_cnpj/<cnpj>')
+@app.route('/verify-cnpj', methods=['POST'])
+@login_required
+def cnpj_verification():
+    return render_template('cnpj_verification.html')
+
+@app.route('/verify-cnpj/<cnpj>')
+@login_required
 def verify_cnpj(cnpj):
     """Verifica se um CNPJ é válido e retorna informações da empresa"""
     try:
@@ -590,8 +601,9 @@ def verify_cnpj(cnpj):
     
     return jsonify({'valid': False, 'cnpj': cnpj})
 
-@app.route('/cnpj_verification')
-def cnpj_verification():
+@app.route('/cnpj-verification')
+@login_required
+def cnpj_verification_page():
     return render_template('cnpj_verification.html', active_page='cnpj_verification')
 
 def extract_and_enrich_cnpj(description, transaction_type):
