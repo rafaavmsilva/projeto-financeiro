@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: projeto-financeiro
+    name: financeiro-af360bank
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
