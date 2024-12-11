@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: financeiro-af360bank
+    name: projeto-financeiro
     env: python
     region: oregon
     plan: free
