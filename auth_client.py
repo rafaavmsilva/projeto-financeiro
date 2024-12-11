@@ -24,9 +24,15 @@ class AuthClient:
     def login_required(self, f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if 'user' not in session:
-                flash('Por favor, faça login para acessar esta página')
-                return redirect(f"{self.auth_server_url}/login?app={self.app_name}")
+            token = session.get('token')
+            if not token:
+                return redirect(f"{self.auth_server_url}/login")
+            
+            verification = self.verify_token(token)
+            if not verification or not verification.get('valid'):
+                session.clear()
+                return redirect(f"{self.auth_server_url}/login")
+            
             return f(*args, **kwargs)
         return decorated_function
 
@@ -40,7 +46,7 @@ class AuthClient:
                 
             result = self.verify_token(token)
             if result and result.get('valid'):
-                session['user'] = result['user']
+                session['token'] = token
                 return redirect(url_for('index'))
             
             flash('Token de autenticação inválido ou expirado')
@@ -48,7 +54,7 @@ class AuthClient:
 
         @app.route('/auth/logout')
         def logout():
-            session.pop('user', None)
+            session.pop('token', None)
             return redirect(self.auth_server_url + '/logout')
 
 # Example usage in other applications:
@@ -63,5 +69,5 @@ auth.init_app(app)
 @app.route('/')
 @auth.login_required
 def index():
-    return f"Welcome {session['user']['name']} to {auth.app_name}!"
+    return f"Welcome to {auth.app_name}!"
 """
