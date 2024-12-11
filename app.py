@@ -13,11 +13,18 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 import uuid
 import threading
+from auth_client import AuthClient
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)  # Set session lifetime to 1 hour
+
+# Initialize AuthClient
+auth = AuthClient(
+    auth_server_url='https://af360bank.onrender.com',
+    app_name='Comissoes'
+)
 
 # Ensure the upload and instance folders exist
 for folder in ['instance', 'uploads']:
@@ -52,8 +59,15 @@ def auth():
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('authenticated'):
+        token = session.get('token')
+        if not token:
             return redirect('https://af360bank.onrender.com/login')
+        
+        verification = auth.verify_token(token)
+        if not verification or not verification.get('valid'):
+            session.clear()
+            return redirect('https://af360bank.onrender.com/login')
+        
         return f(*args, **kwargs)
     return decorated_function
     
