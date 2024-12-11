@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from datetime import datetime, timedelta
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired
 import sqlite3
 import os
 import pandas as pd
@@ -27,6 +28,30 @@ RATE_LIMIT_WINDOW = 60  # seconds
 REQUEST_LIMIT = 60      # requests per window
 request_history = {}
 
+def verify_token(token):
+    try:
+        serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+        data = serializer.loads(token, max_age=300)  # Token expires in 5 minutes
+        return data['destination'] == 'financeiro'
+    except:
+        return False
+
+@app.route('/auth')
+def auth():
+    token = request.args.get('token')
+    if not token or not verify_token(token):
+        return redirect('https://af360bank.onrender.com/login')
+    session['authenticated'] = True
+    return redirect(url_for('index'))
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return redirect('https://af360bank.onrender.com/login')
+        return f(*args, **kwargs)
+    return decorated_function
+    
 def rate_limit():
     def decorator(f):
         @wraps(f)
