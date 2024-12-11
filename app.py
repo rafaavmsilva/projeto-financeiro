@@ -21,10 +21,11 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)  # Set session lifetime to 1 hour
 
 # Initialize AuthClient
-auth = AuthClient(
-    auth_server_url='https://af360bank.onrender.com',
-    app_name='Comissoes'
+auth_client = AuthClient(
+    auth_server_url=os.getenv('AUTH_SERVER_URL', 'https://af360bank.onrender.com'),
+    app_name=os.getenv('APP_NAME', 'financeiro')
 )
+auth_client.init_app(app)
 
 # Ensure the upload and instance folders exist
 for folder in ['instance', 'uploads']:
@@ -36,21 +37,18 @@ RATE_LIMIT_WINDOW = 60  # seconds
 REQUEST_LIMIT = 60      # requests per window
 request_history = {}
 
-def verify_token(token):
-    try:
-        serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
-        data = serializer.loads(token, max_age=300)  # Token expires in 5 minutes
-        return data['destination'] == 'financeiro'
-    except:
-        return False
-
 @app.route('/auth')
 def auth():
     token = request.args.get('token')
-    if not token or not verify_token(token):
+    if not token:
+        return redirect('https://af360bank.onrender.com/login')
+    
+    verification = auth_client.verify_token(token)
+    if not verification or not verification.get('valid'):
         return redirect('https://af360bank.onrender.com/login')
     
     # Set session variables
+    session['token'] = token
     session['authenticated'] = True
     session.permanent = True  # Make the session last longer
     
@@ -63,7 +61,7 @@ def login_required(f):
         if not token:
             return redirect('https://af360bank.onrender.com/login')
         
-        verification = auth.verify_token(token)
+        verification = auth_client.verify_token(token)
         if not verification or not verification.get('valid'):
             session.clear()
             return redirect('https://af360bank.onrender.com/login')
