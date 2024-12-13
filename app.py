@@ -168,45 +168,57 @@ def index():
 @login_required
 @rate_limit()
 def upload_file():
-    if not session.get('authenticated'):
-        return redirect('https://af360bank.onrender.com/login')
-    if 'file' not in request.files:
-        flash('Nenhum arquivo selecionado')
-        return redirect(url_for('index'))
-    
-    file = request.files['file']
-    if file.filename == '':
-        flash('Nenhum arquivo selecionado')
-        return redirect(url_for('index'))
-    
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    try:
+        if not session.get('authenticated'):
+            return redirect('https://af360bank.onrender.com/login')
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'Nenhum arquivo selecionado'
+            })
         
-        # Salva o arquivo
-        file.save(filepath)
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'message': 'Nenhum arquivo selecionado'
+            })
         
-        # Inicializa o progresso
-        process_id = str(uuid.uuid4())
-        upload_progress[process_id] = {
-            'status': 'processing',
-            'current': 0,
-            'total': 0,
-            'message': 'Iniciando processamento...'
-        }
-        
-        # Processa o arquivo em uma thread separada
-        thread = threading.Thread(target=process_file_with_progress, args=(filepath, process_id))
-        thread.start()
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Salva o arquivo
+            file.save(filepath)
+            
+            # Inicializa o progresso
+            process_id = str(uuid.uuid4())
+            upload_progress[process_id] = {
+                'status': 'processing',
+                'current': 0,
+                'total': 0,
+                'message': 'Iniciando processamento...'
+            }
+            
+            # Processa o arquivo em uma thread separada
+            thread = threading.Thread(target=process_file_with_progress, args=(filepath, process_id))
+            thread.start()
+            
+            return jsonify({
+                'success': True,
+                'process_id': process_id,
+                'message': 'Arquivo enviado e sendo processado'
+            })
         
         return jsonify({
-            'success': True,
-            'process_id': process_id,
-            'message': 'Arquivo enviado e sendo processado'
+            'success': False,
+            'message': 'Tipo de arquivo não permitido'
         })
-    
-    flash('Tipo de arquivo não permitido')
-    return redirect(url_for('index'))
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao processar arquivo: {str(e)}'
+        })
 
 def find_matching_column(df, column_names):
     for col in df.columns:
