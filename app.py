@@ -20,6 +20,11 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)  # Set session lifetime to 1 hour
 
+# Global variables
+upload_progress = {}  # Dictionary to track file upload progress
+cnpj_cache = {}  # Cache global para armazenar informações de CNPJs
+failed_cnpjs = set()  # Conjunto para armazenar CNPJs que falharam
+
 # Initialize AuthClient
 auth_client = AuthClient(
     auth_server_url=os.getenv('AUTH_SERVER_URL', 'https://af360bank.onrender.com'),
@@ -130,10 +135,6 @@ init_db()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'xls', 'xlsx'}
-
-# Cache global para armazenar informações de CNPJs
-cnpj_cache = {}
-failed_cnpjs = set()  # Conjunto para armazenar CNPJs que falharam
 
 def get_company_info(cnpj):
     """Busca informações da empresa, usando cache se disponível"""
