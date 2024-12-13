@@ -91,6 +91,14 @@ def rate_limit():
         return wrapped
     return decorator
 
+# Database connection helper
+def get_db_connection():
+    # Ensure instance directory exists
+    os.makedirs('instance', exist_ok=True)
+    conn = sqlite3.connect('instance/financas.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
 # Database initialization
 def init_db():
     conn = get_db_connection()
@@ -148,14 +156,6 @@ def get_company_info(cnpj):
         print(f"Erro ao buscar informações da empresa: {e}")
         failed_cnpjs.add(cnpj)
     return None
-
-def get_db_connection():
-    conn = sqlite3.connect('instance/financas.db')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-# Dicionário global para armazenar o progresso do upload
-upload_progress = {}
 
 @app.route('/')
 @login_required
