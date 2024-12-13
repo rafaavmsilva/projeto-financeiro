@@ -474,7 +474,27 @@ def recebidos():
     tipo_filtro = request.args.get('tipo', 'todos')
     cnpj_filtro = request.args.get('cnpj', 'todos')
     
-    # Base query
+    # Get unique CNPJs and their company names for the filter dropdown
+    cursor.execute('''
+        SELECT DISTINCT document
+        FROM transactions 
+        WHERE document IS NOT NULL 
+        AND type IN ('PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO')
+    ''')
+    
+    cnpjs = []
+    for row in cursor.fetchall():
+        if row[0]:  # Only if document is not null
+            company_info = get_company_info(row[0])
+            if company_info:
+                company_name = company_info.get('nome_fantasia') or company_info.get('razao_social', '')
+                if company_name:
+                    cnpjs.append({
+                        'cnpj': row[0],
+                        'name': f"{company_name} ({row[0]})"
+                    })
+    
+    # Base query for transactions
     query = '''
         SELECT date, description, value, type, document
         FROM transactions
@@ -500,26 +520,6 @@ def recebidos():
         'ted_recebida': 0,
         'pagamento': 0
     }
-    
-    # Get unique CNPJs and their company names for the filter dropdown
-    cursor.execute('''
-        SELECT DISTINCT document
-        FROM transactions 
-        WHERE document IS NOT NULL 
-        AND type IN ('PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO')
-    ''')
-    
-    cnpjs = []
-    for row in cursor.fetchall():
-        if row[0]:  # Only if document is not null
-            company_info = get_company_info(row[0])
-            if company_info:
-                company_name = company_info.get('nome_fantasia') or company_info.get('razao_social', '')
-                if company_name:
-                    cnpjs.append({
-                        'cnpj': row[0],
-                        'name': company_name
-                    })
     
     for row in cursor.fetchall():
         transaction = {
