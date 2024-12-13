@@ -33,26 +33,38 @@
         </div>
     </div>
 
-    <!-- Filtro -->
+    <!-- Filtros -->
     <div class="row mb-3">
-        <div class="col">
+        <div class="col-md-6">
             <div class="btn-group" role="group" aria-label="Filtro de transações">
-                <a href="{{ url_for('recebidos', tipo='todos') }}" 
+                <a href="{{ url_for('recebidos', tipo='todos', cnpj=cnpj_filtro) }}" 
                    class="btn btn-outline-primary {% if tipo_filtro == 'todos' %}active{% endif %}">
                     Todos
                 </a>
-                <a href="{{ url_for('recebidos', tipo='PIX RECEBIDO') }}" 
+                <a href="{{ url_for('recebidos', tipo='PIX RECEBIDO', cnpj=cnpj_filtro) }}" 
                    class="btn btn-outline-success {% if tipo_filtro == 'PIX RECEBIDO' %}active{% endif %}">
                     PIX
                 </a>
-                <a href="{{ url_for('recebidos', tipo='TED RECEBIDA') }}" 
+                <a href="{{ url_for('recebidos', tipo='TED RECEBIDA', cnpj=cnpj_filtro) }}" 
                    class="btn btn-outline-info {% if tipo_filtro == 'TED RECEBIDA' %}active{% endif %}">
                     TED
                 </a>
-                <a href="{{ url_for('recebidos', tipo='PAGAMENTO') }}" 
+                <a href="{{ url_for('recebidos', tipo='PAGAMENTO', cnpj=cnpj_filtro) }}" 
                    class="btn btn-outline-warning {% if tipo_filtro == 'PAGAMENTO' %}active{% endif %}">
                     Pagamentos
                 </a>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <select class="form-select" id="cnpjFilter" onchange="filterByCNPJ(this.value)">
+                    <option value="todos" {% if cnpj_filtro == 'todos' %}selected{% endif %}>Todos os CNPJs</option>
+                    {% for cnpj in cnpjs %}
+                    <option value="{{ cnpj.cnpj }}" {% if cnpj_filtro == cnpj.cnpj %}selected{% endif %}>
+                        {{ cnpj.name }} ({{ cnpj.cnpj }})
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
         </div>
     </div>
@@ -108,5 +120,11 @@ document.getElementById('retryButton')?.addEventListener('click', function() {
             alert('Erro ao tentar novamente. Por favor, recarregue a página.');
         });
 });
+
+function filterByCNPJ(cnpj) {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('cnpj', cnpj);
+    window.location.href = currentUrl.toString();
+}
 </script>
 {% endblock %}
