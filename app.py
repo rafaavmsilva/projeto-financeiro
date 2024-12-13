@@ -473,6 +473,8 @@ def recebidos():
     # Get filters from query string
     tipo_filtro = request.args.get('tipo', 'todos')
     cnpj_filtro = request.args.get('cnpj', 'todos')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
     
     # Get unique CNPJs and their company names for the filter dropdown
     cursor.execute('''
@@ -510,6 +512,14 @@ def recebidos():
     if cnpj_filtro != 'todos':
         query += " AND document = ?"
         params.append(cnpj_filtro)
+    
+    if start_date:
+        query += " AND date >= ?"
+        params.append(start_date)
+    
+    if end_date:
+        query += " AND date <= ?"
+        params.append(end_date)
     
     query += " ORDER BY date DESC"
     cursor.execute(query, params)
@@ -563,6 +573,8 @@ def recebidos():
                          totals=totals, 
                          tipo_filtro=tipo_filtro,
                          cnpj_filtro=cnpj_filtro,
+                         start_date=start_date,
+                         end_date=end_date,
                          cnpjs=cnpjs,
                          failed_cnpjs=len(failed_cnpjs))
 
