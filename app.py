@@ -93,26 +93,26 @@ def rate_limit():
 
 # Database initialization
 def init_db():
-    conn = sqlite3.connect('instance/financas.db')
-    c = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
     
-    # Primeiro, verifica se a tabela existe
-    c.execute("DROP TABLE IF EXISTS transactions")
-    
-    # Cria a tabela com a nova estrutura
-    c.execute('''
-        CREATE TABLE transactions (
+    # Create tables
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date DATE NOT NULL,
             description TEXT NOT NULL,
-            document TEXT,
             value REAL NOT NULL,
             type TEXT NOT NULL,
-            identifier TEXT,
             transaction_type TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            document TEXT
         )
     ''')
+    
+    # Create indexes
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_document ON transactions(document)')
     
     conn.commit()
     conn.close()
@@ -359,14 +359,39 @@ def process_file_with_progress(filepath, process_id):
                 print(f"Tipo de transação detectado: {transaction_type}")
                 
                 # Extrai CNPJ se presente
+                cnpj = None
                 if transaction_type:
-                    description = extract_and_enrich_cnpj(description, transaction_type)
+                    # Find sequence of 14 digits that could be a CNPJ
+                    import re
+                    
+                    # Try different CNPJ patterns
+                    cnpj_patterns = [
+                        r'CNPJ[:\s]*(\d{14,15})',  # CNPJ followed by 14 or 15 digits
+                        r'CNPJ[:\s]*(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})',  # CNPJ followed by formatted number
+                        r'\b(\d{14,15})\b',  # Just 14 or 15 digits
+                        r'\b(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})\b'  # Formatted CNPJ
+                    ]
+                    
+                    cnpj_match = None
+                    for pattern in cnpj_patterns:
+                        match = re.search(pattern, description)
+                        if match:
+                            cnpj_match = match
+                            break
+                    
+                    if cnpj_match:
+                        # Extract CNPJ and handle 15-digit case
+                        cnpj = ''.join(filter(str.isdigit, cnpj_match.group(1)))
+                        if len(cnpj) == 15 and cnpj.startswith('0'):
+                            cnpj = cnpj[1:]  # Remove first zero only if 15 digits
+                        elif len(cnpj) != 14:
+                            cnpj = None  # Invalid CNPJ length
                 
                 # Insere no banco de dados
                 cursor.execute('''
-                    INSERT INTO transactions (date, description, value, type, transaction_type)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (date.strftime('%Y-%m-%d'), description, value, transaction_type, 'receita' if value > 0 else 'despesa'))
+                    INSERT INTO transactions (date, description, value, type, transaction_type, document)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (date.strftime('%Y-%m-%d'), description, value, transaction_type, 'receita' if value > 0 else 'despesa', cnpj))
                 
                 processed_rows += 1
                 
