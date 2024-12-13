@@ -432,8 +432,9 @@ def recebidos():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Pegar o filtro da query string
+    # Get filters from query string
     tipo_filtro = request.args.get('tipo', 'todos')
+    cnpj_filtro = request.args.get('cnpj', 'todos')
     
     # Base query
     query = '''
@@ -442,12 +443,18 @@ def recebidos():
         WHERE type IN ('PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO')
     '''
     
-    # Adicionar filtro se necessário
+    # Add filters if necessary
+    params = []
     if tipo_filtro != 'todos':
-        query += f" AND type = ?"
-        cursor.execute(query + " ORDER BY date DESC", (tipo_filtro,))
-    else:
-        cursor.execute(query + " ORDER BY date DESC")
+        query += " AND type = ?"
+        params.append(tipo_filtro)
+    
+    if cnpj_filtro != 'todos':
+        query += " AND document = ?"
+        params.append(cnpj_filtro)
+    
+    query += " ORDER BY date DESC"
+    cursor.execute(query, params)
     
     transactions = []
     totals = {
@@ -455,6 +462,26 @@ def recebidos():
         'ted_recebida': 0,
         'pagamento': 0
     }
+    
+    # Get unique CNPJs and their company names for the filter dropdown
+    cursor.execute('''
+        SELECT DISTINCT document
+        FROM transactions 
+        WHERE document IS NOT NULL 
+        AND type IN ('PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO')
+    ''')
+    
+    cnpjs = []
+    for row in cursor.fetchall():
+        if row[0]:  # Only if document is not null
+            company_info = get_company_info(row[0])
+            if company_info:
+                company_name = company_info.get('nome_fantasia') or company_info.get('razao_social', '')
+                if company_name:
+                    cnpjs.append({
+                        'cnpj': row[0],
+                        'name': company_name
+                    })
     
     for row in cursor.fetchall():
         transaction = {
@@ -466,7 +493,7 @@ def recebidos():
             'has_company_info': False
         }
         
-        # Adicionar ao total correspondente
+        # Add to corresponding total
         if transaction['type'] == 'PIX RECEBIDO':
             totals['pix_recebido'] += transaction['value']
         elif transaction['type'] == 'TED RECEBIDA':
@@ -474,13 +501,12 @@ def recebidos():
         elif transaction['type'] == 'PAGAMENTO':
             totals['pagamento'] += abs(transaction['value'])
         
-        # Buscar nome da empresa se houver CNPJ
+        # Get company name if CNPJ exists
         if transaction['document']:
             company_info = get_company_info(transaction['document'])
             if company_info:
                 company_name = company_info.get('nome_fantasia') or company_info.get('razao_social', '')
                 if company_name:
-                    # Remove os zeros à esquerda do CNPJ para exibição
                     cnpj_sem_zeros = str(int(transaction['document']))
                     
                     if transaction['type'] == 'PAGAMENTO':
@@ -498,6 +524,8 @@ def recebidos():
                          transactions=transactions, 
                          totals=totals, 
                          tipo_filtro=tipo_filtro,
+                         cnpj_filtro=cnpj_filtro,
+                         cnpjs=cnpjs,
                          failed_cnpjs=len(failed_cnpjs))
 
 @app.route('/retry-failed-cnpjs')
