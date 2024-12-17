@@ -8,3 +8,4 @@ Werkzeug==2.3.7
 gunicorn==21.2.0
 itsdangerous==2.0.1
 Jinja2==3.0.1
+xlrd>=1.0.0
