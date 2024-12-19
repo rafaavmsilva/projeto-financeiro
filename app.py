@@ -358,22 +358,30 @@ def recebidos():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     
-    # Base query
+    # Base query with transaction_type extraction
     query = '''
-        SELECT * FROM transactions 
+        SELECT 
+            *,
+            CASE 
+                WHEN description LIKE 'PIX%' THEN 'PIX'
+                WHEN description LIKE 'TED%' THEN 'TED'
+                WHEN description LIKE 'PAGAMENTO%' THEN 'PAGAMENTO'
+                ELSE 'OUTROS'
+            END as transaction_type
+        FROM transactions 
         WHERE type = 'CREDITO'
     '''
     params = []
     
     # Add tipo filter
     if tipo_filtro != 'todos':
-        query += ' AND transaction_type = ?'
-        params.append(tipo_filtro)
+        query += ' AND description LIKE ?'
+        params.append(f'{tipo_filtro}%')
     
     # Add CNPJ filter
     if cnpj_filtro != 'todos':
         query += ' AND description LIKE ?'
-        params.append(f'%{cnpj_filtro}%')
+        params.append(f'%CNPJ {cnpj_filtro}%')
     
     # Add date filters
     if start_date:
@@ -393,9 +401,9 @@ def recebidos():
     # Calculate totals
     totals_query = '''
         SELECT 
-            SUM(CASE WHEN transaction_type = 'PIX RECEBIDO' THEN value ELSE 0 END) as pix_recebido,
-            SUM(CASE WHEN transaction_type = 'TED RECEBIDA' THEN value ELSE 0 END) as ted_recebida,
-            SUM(CASE WHEN transaction_type = 'PAGAMENTO' THEN value ELSE 0 END) as pagamento,
+            SUM(CASE WHEN description LIKE 'PIX%' THEN value ELSE 0 END) as pix_recebido,
+            SUM(CASE WHEN description LIKE 'TED%' THEN value ELSE 0 END) as ted_recebida,
+            SUM(CASE WHEN description LIKE 'PAGAMENTO%' THEN value ELSE 0 END) as pagamento,
             SUM(value) as total
         FROM transactions 
         WHERE type = 'CREDITO'
@@ -411,16 +419,25 @@ def recebidos():
     # Get unique CNPJs for filter dropdown
     cursor.execute('''
         SELECT DISTINCT 
-            substr(description, 
-                instr(description, 'CNPJ ') + 5, 
-                14) as cnpj,
+            CASE 
+                WHEN description REGEXP 'CNPJ ([0-9]{14})' 
+                THEN substr(description, 
+                    instr(description, 'CNPJ ') + 5, 
+                    14)
+                ELSE NULL 
+            END as cnpj,
             MAX(description) as name
         FROM transactions 
         WHERE type = 'CREDITO' 
         AND description LIKE '%CNPJ%'
-        GROUP BY substr(description, 
-            instr(description, 'CNPJ ') + 5, 
-            14)
+        GROUP BY CASE 
+            WHEN description REGEXP 'CNPJ ([0-9]{14})' 
+            THEN substr(description, 
+                instr(description, 'CNPJ ') + 5, 
+                14)
+            ELSE NULL 
+        END
+        HAVING cnpj IS NOT NULL
     ''')
     cnpjs = [{'cnpj': row['cnpj'], 'name': row['name']} for row in cursor.fetchall()]
     
