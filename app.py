@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
-from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash
+import pandas as pd
 import sqlite3
 import os
-import pandas as pd
+import json
 from werkzeug.utils import secure_filename
 import threading
 import uuid
@@ -12,26 +12,24 @@ from cnpj_handler import CNPJHandler
 from transaction_handler import TransactionHandler
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Initialize handlers
+auth_client = AuthClient()
 cnpj_handler = CNPJHandler()
 transaction_handler = TransactionHandler()
 
-# Initialize AuthClient
-auth_client = AuthClient(
-    auth_server_url=os.getenv('AUTH_SERVER_URL', 'https://af360bank.onrender.com'),
-    app_name=os.getenv('APP_NAME', 'financeiro')
-)
-auth_client.init_app(app)
-
-# Global variables
+# Global dictionary to store upload progress
 upload_progress = {}
 
-# Create necessary directories
-for folder in ['instance', 'uploads']:
+@app.before_first_request
+def initialize():
+    init_db()
+
+def ensure_upload_folder():
+    folder = app.config['UPLOAD_FOLDER']
     if not os.path.exists(folder):
         os.makedirs(folder)
 
@@ -91,13 +89,11 @@ def find_matching_column(df, column_names):
 def process_file_with_progress(filepath, process_id):
     try:
         df = pd.read_excel(filepath)
-        total_rows = len(df)
         upload_progress[process_id].update({
-            'total': total_rows,
+            'total': len(df),
             'message': 'Processing file...'
         })
 
-        # Find columns
         data_col = find_matching_column(df, ['Data', 'DATE', 'DT', 'AGENCIA'])
         desc_col = find_matching_column(df, ['Histórico', 'HISTORIC', 'DESCRIÇÃO', 'DESCRICAO', 'CONTA'])
         valor_col = find_matching_column(df, ['Valor', 'VALUE', 'QUANTIA', 'Unnamed: 4'])
@@ -108,13 +104,29 @@ def process_file_with_progress(filepath, process_id):
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        init_db()
+
         for index, row in df.iterrows():
             upload_progress[process_id]['current'] = index + 1
             
             try:
-                date = pd.to_datetime(row[data_col]).date()
+                try:
+                    date = pd.to_datetime(row[data_col], format='%d/%m/%Y').date()
+                except:
+                    try:
+                        date = pd.to_datetime(row[data_col]).date()
+                    except:
+                        print(f"Error processing date at row {index}: {row[data_col]}")
+                        continue
+
                 description = str(row[desc_col]).strip()
-                value = float(str(row[valor_col]).replace('R$', '').replace('.', '').replace(',', '.'))
+                value_str = str(row[valor_col])
+                value_str = value_str.replace('R$', '').replace(' ', '').strip()
+                if ',' in value_str and '.' in value_str:
+                    value_str = value_str.replace('.', '').replace(',', '.')
+                elif ',' in value_str:
+                    value_str = value_str.replace(',', '.')
+                value = float(value_str)
 
                 if pd.isna(date) or pd.isna(description) or pd.isna(value):
                     continue
@@ -264,7 +276,6 @@ def transactions_summary():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get summary of transactions
     cursor.execute('''
         SELECT 
             strftime('%Y-%m', date) as month,
@@ -299,7 +310,7 @@ def cnpj_verification():
     
     return render_template('index.html',
                          active_page='cnpj_verification')
-                         
+
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5002))
