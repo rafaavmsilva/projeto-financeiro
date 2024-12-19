@@ -481,12 +481,6 @@ def retry_failed_cnpjs():
         success = False
     
     return jsonify({'success': success})
-        
-    except Exception as e:
-        print(f"Error retrying failed CNPJs: {str(e)}")
-        success = False
-    
-    return jsonify({'success': success})
 
 @app.route('/enviados')
 @login_required
