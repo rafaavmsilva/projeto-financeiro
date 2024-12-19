@@ -151,6 +151,9 @@ def extract_transaction_info(historico, valor):
 
 def process_file_with_progress(filepath, process_id):
     try:
+        # Initialize database first
+        init_db()
+        
         # Initialize progress
         upload_progress[process_id].update({
             'status': 'processing',
