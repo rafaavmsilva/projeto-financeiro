@@ -17,7 +17,10 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Initialize handlers
-auth_client = AuthClient()
+auth_client = AuthClient(
+    auth_server_url=os.getenv('AUTH_SERVER_URL', 'https://af360bank.onrender.com'),
+    app_name=os.getenv('APP_NAME', 'financeiro')
+)
 cnpj_handler = CNPJHandler()
 transaction_handler = TransactionHandler()
 
