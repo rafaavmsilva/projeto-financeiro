@@ -416,11 +416,11 @@ def recebidos():
     cursor.execute(totals_query, params)
     totals_row = cursor.fetchone()
     
-    # Get unique CNPJs for filter dropdown
+        # Get unique CNPJs for filter dropdown
     cursor.execute('''
         SELECT DISTINCT 
             CASE 
-                WHEN description REGEXP 'CNPJ ([0-9]{14})' 
+                WHEN description LIKE '%CNPJ ______________%' 
                 THEN substr(description, 
                     instr(description, 'CNPJ ') + 5, 
                     14)
@@ -431,7 +431,7 @@ def recebidos():
         WHERE type = 'CREDITO' 
         AND description LIKE '%CNPJ%'
         GROUP BY CASE 
-            WHEN description REGEXP 'CNPJ ([0-9]{14})' 
+            WHEN description LIKE '%CNPJ ______________%' 
             THEN substr(description, 
                 instr(description, 'CNPJ ') + 5, 
                 14)
