@@ -91,7 +91,7 @@ def find_matching_column(df, column_names):
 
 def process_file_with_progress(filepath, process_id):
     try:
-        df = pd.read_excel(filepath)
+        df = pd.read_excel(filepath, skiprows=1)  # Skip header row
         upload_progress[process_id].update({
             'total': len(df),
             'message': 'Processing file...'
@@ -220,10 +220,15 @@ def upload_file():
     
     return jsonify({'success': False, 'message': 'Invalid file type'})
 
-@app.route('/progress/<process_id>')
-def get_progress(process_id):
+@app.route('/upload_progress/<process_id>')
+@login_required
+def get_upload_progress(process_id):
     if process_id in upload_progress:
-        return jsonify(upload_progress[process_id])
+        progress = upload_progress[process_id]
+        # Remove completed processes to free up memory
+        if progress.get('status') in ['completed', 'error']:
+            del upload_progress[process_id]
+        return jsonify(progress)
     return jsonify({'status': 'not_found'})
 
 @app.route('/recebidos')
