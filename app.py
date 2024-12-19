@@ -411,12 +411,16 @@ def recebidos():
     # Get unique CNPJs for filter dropdown
     cursor.execute('''
         SELECT DISTINCT 
-            REGEXP_REPLACE(description, '^.*CNPJ ([0-9]{14}).*$', '\\1') as cnpj,
+            substr(description, 
+                instr(description, 'CNPJ ') + 5, 
+                14) as cnpj,
             MAX(description) as name
         FROM transactions 
         WHERE type = 'CREDITO' 
-        AND description REGEXP 'CNPJ [0-9]{14}'
-        GROUP BY REGEXP_REPLACE(description, '^.*CNPJ ([0-9]{14}).*$', '\\1')
+        AND description LIKE '%CNPJ%'
+        GROUP BY substr(description, 
+            instr(description, 'CNPJ ') + 5, 
+            14)
     ''')
     cnpjs = [{'cnpj': row['cnpj'], 'name': row['name']} for row in cursor.fetchall()]
     
@@ -471,6 +475,12 @@ def retry_failed_cnpjs():
         
         conn.commit()
         conn.close()
+        
+    except Exception as e:
+        print(f"Error retrying failed CNPJs: {str(e)}")
+        success = False
+    
+    return jsonify({'success': success})
         
     except Exception as e:
         print(f"Error retrying failed CNPJs: {str(e)}")
