@@ -7,6 +7,8 @@ from werkzeug.utils import secure_filename
 import threading
 import uuid
 from functools import wraps
+from datetime import datetime
+import re
 from auth_client import AuthClient
 from cnpj_handler import CNPJHandler
 from transaction_handler import TransactionHandler
@@ -26,10 +28,6 @@ transaction_handler = TransactionHandler()
 
 # Global dictionary to store upload progress
 upload_progress = {}
-
-@app.before_first_request
-def initialize():
-    init_db()
 
 def ensure_upload_folder():
     folder = app.config['UPLOAD_FOLDER']
@@ -83,27 +81,104 @@ def init_db():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'xls', 'xlsx'}
 
-def find_matching_column(df, column_names):
-    for col in df.columns:
-        col_str = str(col).upper().strip()
-        for name in column_names:
-            if name.upper() in col_str:
-                return col
+def find_header_row(df):
+    """Encontra a linha que contém os cabeçalhos das colunas"""
+    header_keywords = ['data', 'histórico', 'valor', 'date', 'historic', 'value']
+    
+    for idx, row in df.iterrows():
+        row_values = [str(val).lower().strip() for val in row if not pd.isna(val)]
+        if any(keyword in value for value in row_values for keyword in header_keywords):
+            return idx
+    return 0
+
+def find_matching_column(df, possible_names):
+    """Find a column name that matches any of the possible variations"""
+    for name in possible_names:
+        matches = [col for col in df.columns if str(name).lower() in str(col).lower()]
+        if matches:
+            return matches[0]
     return None
+
+def extract_transaction_info(historico, valor):
+    """Extract detailed transaction information from the historic text"""
+    historico = historico.upper()
+    info = {
+        'tipo': None,
+        'valor': valor,
+        'identificador': None,
+        'document': None,
+        'description': historico
+    }
+    
+    tipo_mapping = {
+        'PIX RECEBIDO': ['PIX RECEBIDO'],
+        'PIX ENVIADO': ['PIX ENVIADO'],
+        'TED RECEBIDA': ['TED RECEBIDA', 'TED CREDIT'],
+        'TED ENVIADA': ['TED ENVIADA', 'TED DEBIT'],
+        'PAGAMENTO': ['PAGAMENTO', 'PGTO', 'PAG'],
+        'TARIFA': ['TARIFA', 'TAR'],
+        'IOF': ['IOF'],
+        'RESGATE': ['RESGATE'],
+        'APLICACAO': ['APLICACAO', 'APLICAÇÃO'],
+        'COMPRA': ['COMPRA'],
+        'COMPENSACAO': ['COMPENSACAO', 'COMPENSAÇÃO'],
+        'CHEQUE DEVOLVIDO': ['CHEQUE DEVOLVIDO', 'CH DEVOLVIDO'],
+        'JUROS': ['JUROS'],
+        'MULTA': ['MULTA'],
+        'ANTECIPACAO': ['ANTECIPACAO', 'ANTECIPAÇÃO'],
+        'CHEQUE EMITIDO': ['CHEQUE EMITIDO', 'CH EMITIDO']
+    }
+    
+    for tipo, keywords in tipo_mapping.items():
+        if any(keyword in historico for keyword in keywords):
+            info['tipo'] = tipo
+            break
+    
+    if info['tipo'] is None:
+        info['tipo'] = 'OUTROS'
+    
+    if info['tipo'] in ['PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO']:
+        cnpj_text_match = re.search(r'CNPJ[:\s]+(\d{12,14})', historico)
+        if cnpj_text_match:
+            cnpj = cnpj_text_match.group(1)
+            cnpj = str(int(cnpj)).zfill(14)
+            info['document'] = cnpj
+            
+            if info['tipo'] == 'PAGAMENTO':
+                info['description'] = historico.replace(cnpj_text_match.group(0), f"CNPJ {str(int(cnpj))}")
+    
+    return info
 
 def process_file_with_progress(filepath, process_id):
     try:
-        df = pd.read_excel(filepath, skiprows=1)  # Skip header row
+        # Initialize progress
         upload_progress[process_id].update({
-            'total': len(df),
-            'message': 'Processing file...'
+            'status': 'processing',
+            'message': 'Reading file...'
         })
 
-        data_col = find_matching_column(df, ['Data', 'DATE', 'DT', 'AGENCIA', 'DATA'])
-        desc_col = find_matching_column(df, ['Histórico', 'HISTORIC', 'DESCRIÇÃO', 'DESCRICAO', 'CONTA', 'HISTORICO'])
-        valor_col = find_matching_column(df, ['Valor', 'VALUE', 'QUANTIA', 'VALOR', 'VLR'])
+        # Read Excel file
+        df = pd.read_excel(filepath)
+        
+        # Find header row
+        header_row = find_header_row(df)
+        if header_row > 0:
+            new_columns = [str(val).strip() if not pd.isna(val) else f'Column_{i}' 
+                         for i, val in enumerate(df.iloc[header_row])]
+            df.columns = new_columns
+            df = df.iloc[header_row + 1:].reset_index(drop=True)
 
-        # Add debug logging
+        upload_progress[process_id].update({
+            'total': len(df),
+            'current': 0,
+            'message': 'Processing transactions...'
+        })
+
+        # Find columns using the improved matching function
+        data_col = find_matching_column(df, ['Data', 'DATE', 'DT'])
+        desc_col = find_matching_column(df, ['Histórico', 'HISTORIC', 'DESCRIÇÃO', 'DESCRICAO'])
+        valor_col = find_matching_column(df, ['Valor', 'VALUE', 'QUANTIA'])
+
         if not all([data_col, desc_col, valor_col]):
             print("Column detection results:")
             print(f"Available columns: {df.columns.tolist()}")
@@ -115,40 +190,54 @@ def process_file_with_progress(filepath, process_id):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        init_db()
-
         for index, row in df.iterrows():
-            upload_progress[process_id]['current'] = index + 1
-            
             try:
-                try:
-                    date = pd.to_datetime(row[data_col], format='%d/%m/%Y').date()
-                except:
-                    try:
-                        date = pd.to_datetime(row[data_col]).date()
-                    except:
-                        print(f"Error processing date at row {index}: {row[data_col]}")
-                        continue
+                # Update progress
+                upload_progress[process_id]['current'] = index + 1
 
-                description = str(row[desc_col]).strip()
-                value_str = str(row[valor_col])
-                value_str = value_str.replace('R$', '').replace(' ', '').strip()
-                if ',' in value_str and '.' in value_str:
-                    value_str = value_str.replace('.', '').replace(',', '.')
-                elif ',' in value_str:
-                    value_str = value_str.replace(',', '.')
-                value = float(value_str)
-
-                if pd.isna(date) or pd.isna(description) or pd.isna(value):
+                # Skip empty rows
+                if pd.isna(row[data_col]) or pd.isna(row[desc_col]) or pd.isna(row[valor_col]):
                     continue
 
-                transaction_type = transaction_handler.detect_type(description, value)
-                enriched_description = cnpj_handler.extract_and_enrich_cnpj(description, transaction_type)
+                # Process date
+                try:
+                    if isinstance(row[data_col], str):
+                        try:
+                            date = datetime.strptime(row[data_col], '%d/%m/%Y').date()
+                        except ValueError:
+                            date = pd.to_datetime(row[data_col]).date()
+                    else:
+                        date = pd.to_datetime(row[data_col]).date()
+                except Exception as e:
+                    print(f"Error processing date at row {index}: {row[data_col]}")
+                    continue
 
+                # Process description
+                description = str(row[desc_col]).strip()
+
+                # Process value
+                valor = row[valor_col]
+                if isinstance(valor, (int, float)):
+                    value = float(valor)
+                else:
+                    valor_str = str(valor).replace('R$', '').strip()
+                    value = float(valor_str.replace('.', '').replace(',', '.'))
+
+                # Extract transaction info
+                info = extract_transaction_info(description, value)
+
+                # Insert into database
                 cursor.execute('''
-                    INSERT INTO transactions (date, description, value, type, transaction_type)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (date, enriched_description, value, 'CREDITO' if value > 0 else 'DEBITO', transaction_type))
+                    INSERT INTO transactions (date, description, value, type, transaction_type, document)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    date,
+                    info['description'],
+                    value,
+                    'CREDITO' if value > 0 else 'DEBITO',
+                    info['tipo'],
+                    info.get('document', '')
+                ))
 
             except Exception as e:
                 print(f"Error processing row {index}: {str(e)}")
@@ -157,8 +246,10 @@ def process_file_with_progress(filepath, process_id):
         conn.commit()
         conn.close()
 
-        upload_progress[process_id]['status'] = 'completed'
-        upload_progress[process_id]['message'] = 'Processing completed'
+        upload_progress[process_id].update({
+            'status': 'completed',
+            'message': 'Processing completed successfully'
+        })
 
     except Exception as e:
         upload_progress[process_id].update({
@@ -201,8 +292,7 @@ def upload_file():
         return jsonify({'success': False, 'message': 'No file selected'})
     
     if file and allowed_file(file.filename):
-        # Ensure upload directory exists
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        ensure_upload_folder()
         
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -233,7 +323,6 @@ def upload_file():
 def get_upload_progress(process_id):
     if process_id in upload_progress:
         progress = upload_progress[process_id]
-        # Remove completed processes to free up memory
         if progress.get('status') in ['completed', 'error']:
             del upload_progress[process_id]
         return jsonify(progress)
