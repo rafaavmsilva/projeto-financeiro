@@ -19,6 +19,10 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)
 
+# Global variables
+upload_progress = {}  # Dictionary to track file upload progress
+failed_cnpjs = set()  # Set to track failed CNPJ lookups
+
 # Initialize handlers
 auth_client = AuthClient(
     auth_server_url=os.getenv('AUTH_SERVER_URL', 'https://af360bank.onrender.com'),
@@ -26,9 +30,6 @@ auth_client = AuthClient(
 )
 cnpj_handler = CNPJHandler()
 transaction_handler = TransactionHandler()
-
-# Global dictionary to store upload progress
-upload_progress = {}
 
 def ensure_upload_folder():
     folder = app.config['UPLOAD_FOLDER']
@@ -121,6 +122,8 @@ def extract_and_enrich_cnpj(description, transaction_type):
                             match.group(0),
                             f"CNPJ {cnpj} - {company_info['razao_social']}"
                         )
+                    else:
+                        failed_cnpjs.add(cnpj)
     
     return description
 
@@ -161,15 +164,8 @@ def extract_transaction_info(historico, valor):
     if info['tipo'] is None:
         info['tipo'] = 'OUTROS'
     
-    if info['tipo'] in ['PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO']:
-        cnpj_text_match = re.search(r'CNPJ[:\s]+(\d{12,14})', historico)
-        if cnpj_text_match:
-            cnpj = cnpj_text_match.group(1)
-            cnpj = str(int(cnpj)).zfill(14)
-            info['document'] = cnpj
-            
-            if info['tipo'] == 'PAGAMENTO':
-                info['description'] = historico.replace(cnpj_text_match.group(0), f"CNPJ {str(int(cnpj))}")
+    # Enrich description with CNPJ info if available
+    info['description'] = extract_and_enrich_cnpj(historico, info['tipo'])
     
     return info
 
@@ -216,6 +212,7 @@ def process_file_with_progress(filepath, process_id):
             try:
                 # Update progress
                 upload_progress[process_id]['current'] = index + 1
+                upload_progress[process_id]['message'] = f'Processing row {index + 1} of {len(df)}'
 
                 # Skip empty rows
                 if pd.isna(row[data_col]) or pd.isna(row[desc_col]) or pd.isna(row[valor_col]):
@@ -234,11 +231,10 @@ def process_file_with_progress(filepath, process_id):
                     print(f"Error processing date at row {index}: {row[data_col]}")
                     continue
 
-                # Process description
+                # Process description and value
                 description = str(row[desc_col]).strip()
-
-                # Process value
                 valor = row[valor_col]
+                
                 if isinstance(valor, (int, float)):
                     value = float(valor)
                 else:
@@ -366,7 +362,8 @@ def recebidos():
     
     return render_template('recebidos.html', 
                          transactions=transactions, 
-                         active_page='recebidos')
+                         active_page='recebidos',
+                         failed_cnpjs=len(failed_cnpjs))
 
 @app.route('/enviados')
 @login_required
@@ -384,7 +381,8 @@ def enviados():
     
     return render_template('enviados.html', 
                          transactions=transactions, 
-                         active_page='enviados')
+                         active_page='enviados',
+                         failed_cnpjs=len(failed_cnpjs))
 
 @app.route('/transactions')
 @login_required
@@ -398,7 +396,8 @@ def transactions():
     
     return render_template('transactions.html', 
                          transactions=transactions, 
-                         active_page='transactions')
+                         active_page='transactions',
+                         failed_cnpjs=len(failed_cnpjs))
 
 @app.route('/transactions_summary')
 @login_required
@@ -422,7 +421,8 @@ def transactions_summary():
     
     return render_template('transactions_summary.html', 
                          transactions_summary=summary, 
-                         active_page='transactions_summary')
+                         active_page='transactions_summary',
+                         failed_cnpjs=len(failed_cnpjs))
 
 @app.route('/cnpj_verification', methods=['GET', 'POST'])
 @login_required
@@ -434,12 +434,14 @@ def cnpj_verification():
             if company_info:
                 return render_template('cnpj_verification.html',
                                     active_page='cnpj_verification',
-                                    company_info=company_info)
+                                    company_info=company_info,
+                                    failed_cnpjs=len(failed_cnpjs))
             else:
                 flash('CNPJ não encontrado ou serviço indisponível', 'error')
     
     return render_template('cnpj_verification.html',
-                         active_page='cnpj_verification')
+                         active_page='cnpj_verification',
+                         failed_cnpjs=len(failed_cnpjs))
 
 if __name__ == '__main__':
     init_db()
