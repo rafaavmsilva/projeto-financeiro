@@ -208,6 +208,56 @@ def get_progress(process_id):
         return jsonify(upload_progress[process_id])
     return jsonify({'status': 'not_found'})
 
+@app.route('/recebidos')
+@login_required
+def recebidos():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM transactions 
+        WHERE type = 'CREDITO' 
+        ORDER BY date DESC
+    ''')
+    transactions = cursor.fetchall()
+    conn.close()
+    
+    return render_template('index.html', 
+                         transactions=transactions, 
+                         active_page='recebidos')
+
+@app.route('/enviados')
+@login_required
+def enviados():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM transactions 
+        WHERE type = 'DEBITO' 
+        ORDER BY date DESC
+    ''')
+    transactions = cursor.fetchall()
+    conn.close()
+    
+    return render_template('index.html', 
+                         transactions=transactions, 
+                         active_page='enviados')
+
+@app.route('/transactions')
+@login_required
+def transactions():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM transactions ORDER BY date DESC')
+    transactions = cursor.fetchall()
+    conn.close()
+    
+    return render_template('index.html', 
+                         transactions=transactions, 
+                         active_page='transactions')
+
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5002))
