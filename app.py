@@ -85,8 +85,10 @@ def allowed_file(filename):
 
 def find_matching_column(df, column_names):
     for col in df.columns:
-        if col.upper() in [name.upper() for name in column_names]:
-            return col
+        col_str = str(col).upper().strip()
+        for name in column_names:
+            if name.upper() in col_str:
+                return col
     return None
 
 def process_file_with_progress(filepath, process_id):
@@ -97,11 +99,17 @@ def process_file_with_progress(filepath, process_id):
             'message': 'Processing file...'
         })
 
-        data_col = find_matching_column(df, ['Data', 'DATE', 'DT', 'AGENCIA'])
-        desc_col = find_matching_column(df, ['Histórico', 'HISTORIC', 'DESCRIÇÃO', 'DESCRICAO', 'CONTA'])
-        valor_col = find_matching_column(df, ['Valor', 'VALUE', 'QUANTIA', 'Unnamed: 4'])
+        data_col = find_matching_column(df, ['Data', 'DATE', 'DT', 'AGENCIA', 'DATA'])
+        desc_col = find_matching_column(df, ['Histórico', 'HISTORIC', 'DESCRIÇÃO', 'DESCRICAO', 'CONTA', 'HISTORICO'])
+        valor_col = find_matching_column(df, ['Valor', 'VALUE', 'QUANTIA', 'VALOR', 'VLR'])
 
+        # Add debug logging
         if not all([data_col, desc_col, valor_col]):
+            print("Column detection results:")
+            print(f"Available columns: {df.columns.tolist()}")
+            print(f"Data column: {data_col}")
+            print(f"Description column: {desc_col}")
+            print(f"Value column: {valor_col}")
             raise Exception("Required columns not found")
 
         conn = get_db_connection()
