@@ -193,6 +193,9 @@ def upload_file():
         return jsonify({'success': False, 'message': 'No file selected'})
     
     if file and allowed_file(file.filename):
+        # Ensure upload directory exists
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
