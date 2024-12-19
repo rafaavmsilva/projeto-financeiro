@@ -258,6 +258,31 @@ def transactions():
                          transactions=transactions, 
                          active_page='transactions')
 
+@app.route('/transactions_summary')
+@login_required
+def transactions_summary():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get summary of transactions
+    cursor.execute('''
+        SELECT 
+            strftime('%Y-%m', date) as month,
+            SUM(CASE WHEN type = 'CREDITO' THEN value ELSE 0 END) as total_credits,
+            SUM(CASE WHEN type = 'DEBITO' THEN value ELSE 0 END) as total_debits,
+            COUNT(CASE WHEN type = 'CREDITO' THEN 1 END) as credit_count,
+            COUNT(CASE WHEN type = 'DEBITO' THEN 1 END) as debit_count
+        FROM transactions 
+        GROUP BY strftime('%Y-%m', date)
+        ORDER BY month DESC
+    ''')
+    summary = cursor.fetchall()
+    conn.close()
+    
+    return render_template('index.html', 
+                         transactions_summary=summary, 
+                         active_page='transactions_summary')
+                         
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5002))
