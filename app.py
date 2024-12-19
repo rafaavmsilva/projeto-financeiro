@@ -7,7 +7,7 @@ from werkzeug.utils import secure_filename
 import threading
 import uuid
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from auth_client import AuthClient
 from cnpj_handler import CNPJHandler
@@ -17,6 +17,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)
 
 # Initialize handlers
 auth_client = AuthClient(
@@ -82,7 +83,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'xls', 'xlsx'}
 
 def find_header_row(df):
-    """Encontra a linha que contém os cabeçalhos das colunas"""
     header_keywords = ['data', 'histórico', 'valor', 'date', 'historic', 'value']
     
     for idx, row in df.iterrows():
@@ -92,15 +92,39 @@ def find_header_row(df):
     return 0
 
 def find_matching_column(df, possible_names):
-    """Find a column name that matches any of the possible variations"""
     for name in possible_names:
         matches = [col for col in df.columns if str(name).lower() in str(col).lower()]
         if matches:
             return matches[0]
     return None
 
+def extract_and_enrich_cnpj(description, transaction_type):
+    cnpj_patterns = [
+        r'CNPJ[:\s]*(\d{14,15})',
+        r'CNPJ[:\s]*(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})',
+        r'(\d{14})(?=\D|$)'
+    ]
+    
+    for pattern in cnpj_patterns:
+        match = re.search(pattern, description)
+        if match:
+            cnpj = match.group(1)
+            cnpj = re.sub(r'\D', '', cnpj)
+            
+            if len(cnpj) >= 14:
+                cnpj = cnpj[:14]
+                
+                if transaction_type in ['PIX RECEBIDO', 'TED RECEBIDA', 'PAGAMENTO']:
+                    company_info = cnpj_handler.get_company_info(cnpj)
+                    if company_info and 'razao_social' in company_info:
+                        return description.replace(
+                            match.group(0),
+                            f"CNPJ {cnpj} - {company_info['razao_social']}"
+                        )
+    
+    return description
+
 def extract_transaction_info(historico, valor):
-    """Extract detailed transaction information from the historic text"""
     historico = historico.upper()
     info = {
         'tipo': None,
@@ -177,17 +201,12 @@ def process_file_with_progress(filepath, process_id):
             'message': 'Processing transactions...'
         })
 
-        # Find columns using the improved matching function
+        # Find columns
         data_col = find_matching_column(df, ['Data', 'DATE', 'DT'])
         desc_col = find_matching_column(df, ['Histórico', 'HISTORIC', 'DESCRIÇÃO', 'DESCRICAO'])
         valor_col = find_matching_column(df, ['Valor', 'VALUE', 'QUANTIA'])
 
         if not all([data_col, desc_col, valor_col]):
-            print("Column detection results:")
-            print(f"Available columns: {df.columns.tolist()}")
-            print(f"Data column: {data_col}")
-            print(f"Description column: {desc_col}")
-            print(f"Value column: {valor_col}")
             raise Exception("Required columns not found")
 
         conn = get_db_connection()
@@ -326,7 +345,7 @@ def upload_file():
 def get_upload_progress(process_id):
     if process_id in upload_progress:
         progress = upload_progress[process_id]
-        if progress.get('status') in ['completed', 'error']:
+        if progress['status'] in ['completed', 'error']:
             del upload_progress[process_id]
         return jsonify(progress)
     return jsonify({'status': 'not_found'})
@@ -345,7 +364,7 @@ def recebidos():
     transactions = cursor.fetchall()
     conn.close()
     
-    return render_template('index.html', 
+    return render_template('recebidos.html', 
                          transactions=transactions, 
                          active_page='recebidos')
 
@@ -363,7 +382,7 @@ def enviados():
     transactions = cursor.fetchall()
     conn.close()
     
-    return render_template('index.html', 
+    return render_template('enviados.html', 
                          transactions=transactions, 
                          active_page='enviados')
 
@@ -377,7 +396,7 @@ def transactions():
     transactions = cursor.fetchall()
     conn.close()
     
-    return render_template('index.html', 
+    return render_template('transactions.html', 
                          transactions=transactions, 
                          active_page='transactions')
 
@@ -401,7 +420,7 @@ def transactions_summary():
     summary = cursor.fetchall()
     conn.close()
     
-    return render_template('index.html', 
+    return render_template('transactions_summary.html', 
                          transactions_summary=summary, 
                          active_page='transactions_summary')
 
@@ -413,13 +432,13 @@ def cnpj_verification():
         if cnpj:
             company_info = cnpj_handler.get_company_info(cnpj)
             if company_info:
-                return render_template('index.html',
+                return render_template('cnpj_verification.html',
                                     active_page='cnpj_verification',
                                     company_info=company_info)
             else:
                 flash('CNPJ não encontrado ou serviço indisponível', 'error')
     
-    return render_template('index.html',
+    return render_template('cnpj_verification.html',
                          active_page='cnpj_verification')
 
 if __name__ == '__main__':
