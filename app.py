@@ -352,18 +352,131 @@ def recebidos():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('''
+    # Get filter parameters
+    tipo_filtro = request.args.get('tipo', 'todos')
+    cnpj_filtro = request.args.get('cnpj', 'todos')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    # Base query
+    query = '''
         SELECT * FROM transactions 
-        WHERE type = 'CREDITO' 
-        ORDER BY date DESC
-    ''')
+        WHERE type = 'CREDITO'
+    '''
+    params = []
+    
+    # Add tipo filter
+    if tipo_filtro != 'todos':
+        query += ' AND transaction_type = ?'
+        params.append(tipo_filtro)
+    
+    # Add CNPJ filter
+    if cnpj_filtro != 'todos':
+        query += ' AND description LIKE ?'
+        params.append(f'%{cnpj_filtro}%')
+    
+    # Add date filters
+    if start_date:
+        query += ' AND date >= ?'
+        params.append(start_date)
+    if end_date:
+        query += ' AND date <= ?'
+        params.append(end_date)
+    
+    # Add ordering
+    query += ' ORDER BY date DESC'
+    
+    # Get transactions
+    cursor.execute(query, params)
     transactions = cursor.fetchall()
+    
+    # Calculate totals
+    totals_query = '''
+        SELECT 
+            SUM(CASE WHEN transaction_type = 'PIX RECEBIDO' THEN value ELSE 0 END) as pix_recebido,
+            SUM(CASE WHEN transaction_type = 'TED RECEBIDA' THEN value ELSE 0 END) as ted_recebida,
+            SUM(CASE WHEN transaction_type = 'PAGAMENTO' THEN value ELSE 0 END) as pagamento,
+            SUM(value) as total
+        FROM transactions 
+        WHERE type = 'CREDITO'
+    '''
+    
+    # Apply the same filters to totals
+    if tipo_filtro != 'todos' or cnpj_filtro != 'todos' or start_date or end_date:
+        totals_query = totals_query.replace('WHERE type = ', 'WHERE type = ') + query[query.find('AND'):]
+    
+    cursor.execute(totals_query, params)
+    totals_row = cursor.fetchone()
+    
+    # Get unique CNPJs for filter dropdown
+    cursor.execute('''
+        SELECT DISTINCT 
+            REGEXP_REPLACE(description, '^.*CNPJ ([0-9]{14}).*$', '\\1') as cnpj,
+            MAX(description) as name
+        FROM transactions 
+        WHERE type = 'CREDITO' 
+        AND description REGEXP 'CNPJ [0-9]{14}'
+        GROUP BY REGEXP_REPLACE(description, '^.*CNPJ ([0-9]{14}).*$', '\\1')
+    ''')
+    cnpjs = [{'cnpj': row['cnpj'], 'name': row['name']} for row in cursor.fetchall()]
+    
+    totals = {
+        'pix_recebido': totals_row['pix_recebido'] or 0,
+        'ted_recebida': totals_row['ted_recebida'] or 0,
+        'pagamento': totals_row['pagamento'] or 0,
+        'total': totals_row['total'] or 0
+    }
+    
     conn.close()
     
     return render_template('recebidos.html', 
-                         transactions=transactions, 
+                         transactions=transactions,
+                         totals=totals,
+                         cnpjs=cnpjs,
+                         tipo_filtro=tipo_filtro,
+                         cnpj_filtro=cnpj_filtro,
+                         start_date=start_date,
+                         end_date=end_date,
                          active_page='recebidos',
                          failed_cnpjs=len(failed_cnpjs))
+
+@app.route('/retry_failed_cnpjs')
+@login_required
+def retry_failed_cnpjs():
+    global failed_cnpjs
+    success = True
+    
+    try:
+        # Create a copy of failed_cnpjs to iterate over
+        cnpjs_to_retry = failed_cnpjs.copy()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        for cnpj in cnpjs_to_retry:
+            company_info = cnpj_handler.get_company_info(cnpj)
+            if company_info and 'razao_social' in company_info:
+                # Update descriptions in database
+                cursor.execute('''
+                    UPDATE transactions 
+                    SET description = REPLACE(
+                        description,
+                        'CNPJ ' || ?,
+                        'CNPJ ' || ? || ' - ' || ?
+                    )
+                    WHERE description LIKE ?
+                ''', (cnpj, cnpj, company_info['razao_social'], f'%CNPJ {cnpj}%'))
+                
+                failed_cnpjs.remove(cnpj)
+        
+        conn.commit()
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error retrying failed CNPJs: {str(e)}")
+        success = False
+    
+    return jsonify({'success': success})
 
 @app.route('/enviados')
 @login_required
