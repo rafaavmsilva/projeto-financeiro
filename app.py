@@ -282,6 +282,23 @@ def transactions_summary():
     return render_template('index.html', 
                          transactions_summary=summary, 
                          active_page='transactions_summary')
+
+@app.route('/cnpj_verification', methods=['GET', 'POST'])
+@login_required
+def cnpj_verification():
+    if request.method == 'POST':
+        cnpj = request.form.get('cnpj')
+        if cnpj:
+            company_info = cnpj_handler.get_company_info(cnpj)
+            if company_info:
+                return render_template('index.html',
+                                    active_page='cnpj_verification',
+                                    company_info=company_info)
+            else:
+                flash('CNPJ não encontrado ou serviço indisponível', 'error')
+    
+    return render_template('index.html',
+                         active_page='cnpj_verification')
                          
 if __name__ == '__main__':
     init_db()
